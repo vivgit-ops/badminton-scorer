@@ -316,7 +316,7 @@ async function startOffline(){
   if(typeof Vosk==='undefined'){$('heard').textContent='Offline engine missing (vosk.js not found)';return}
   try{
     $('heard').textContent='Loading offline voice model... first time can take a minute';
-    if(!voskModel){voskModel=await Vosk.createModel('model.tar.gz')}
+    if(!voskModel){voskModel=await Vosk.createModel(new URL('model.tar.gz',location.href).href)}
     voskStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
     voskCtx=new (window.AudioContext||window.webkitAudioContext)();
     vrec=new voskModel.KaldiRecognizer(voskCtx.sampleRate);

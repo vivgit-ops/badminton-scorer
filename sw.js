@@ -1,5 +1,5 @@
 // Change the version number each time you update index.html, so phones get the new version.
-const CACHE = 'scorer-v1';
+const CACHE = 'scorer-v2';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 const BIG = ['vosk.js', 'model.tar.gz'];
 
