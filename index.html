@@ -2,6 +2,8 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Badminton Scorer</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f8a5f">
 <style>
 :root{--bg:#f4f7f5;--card:#fff;--tx:#14231b;--mu:#5d6f65;--a:#0f8a5f;--b:#e0662b;--bd:#dce5df;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1612;--card:#17221c;--tx:#e8f1ec;--mu:#92a69b;--bd:#26362d;--a:#2fc48d;--b:#ff8a4d}}
@@ -61,6 +63,7 @@ input{width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);back
 
 <div id="status" class="status"></div>
 <button class="mic" id="mic">🎤 Start voice</button>
+<button class="mic" id="off" style="margin-top:8px">🎧 Offline voice</button>
 <div class="heard" id="heard">Say the score, e.g. "5 3" or "10 all"</div>
 <div class="typebox"><input id="vtxt" placeholder="Type or dictate score (e.g. 5 3), press Enter" aria-label="Score text"><button id="vgo">Go</button></div>
 <div class="typebox"><select id="winEvery"><option value="30">Every 30s</option><option value="60">Every 60s</option></select><button id="winBtn">⏱ Auto window: Off</button></div>
@@ -85,6 +88,7 @@ input{width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);back
 </div>
 </div>
 
+<script src="vosk.js"></script>
 <script>
 var bestOf=3, mode='pts';
 var P={a:0,b:0}, W={a:0,b:0}, H=[], stack=[], over=false, note='';
@@ -148,7 +152,7 @@ function render(){
 
 /* ---------- Voice input ---------- */
 var rec=null, listening=false;
-var WORDS={zero:0,love:0,nil:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30};
+var WORDS={zero:0,love:0,nil:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,to:2,too:2,for:4};
 function isW(w){return Object.prototype.hasOwnProperty.call(WORDS,w)}
 function nums(t){
   var tk=t.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(' '),out=[],all=false;
@@ -304,6 +308,38 @@ if(location.hostname==='localhost'||location.hostname==='127.0.0.1'){
   es.onmessage=function(e){hear(e.data)};
   es.onerror=function(){$('heard').textContent='Local voice server not running.'};
 }
+
+/* ---------- Offline voice (Vosk running in the browser) ---------- */
+var voskModel=null,voskNode=null,voskCtx=null,voskStream=null,vrec=null,voskOn=false;
+function setOff(){$('off').textContent=voskOn?'🛑 Stop offline voice':'🎧 Offline voice';$('off').classList.toggle('live',voskOn)}
+async function startOffline(){
+  if(typeof Vosk==='undefined'){$('heard').textContent='Offline engine missing (vosk.js not found)';return}
+  try{
+    $('heard').textContent='Loading offline voice model... first time can take a minute';
+    if(!voskModel){voskModel=await Vosk.createModel('model.tar.gz')}
+    voskStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
+    voskCtx=new (window.AudioContext||window.webkitAudioContext)();
+    vrec=new voskModel.KaldiRecognizer(voskCtx.sampleRate);
+    vrec.on('result',function(m){var t=m.result&&m.result.text;if(t)hear(t)});
+    var src=voskCtx.createMediaStreamSource(voskStream);
+    voskNode=voskCtx.createScriptProcessor(4096,1,1);
+    voskNode.onaudioprocess=function(e){try{vrec.acceptWaveform(e.inputBuffer)}catch(x){}};
+    src.connect(voskNode);voskNode.connect(voskCtx.destination);
+    voskOn=true;setOff();
+    $('heard').textContent='Offline voice is listening. Say the score.';
+  }catch(err){$('heard').textContent='Offline voice error: '+((err&&err.message)||err)}
+}
+function stopOffline(){
+  voskOn=false;
+  try{voskNode.disconnect()}catch(x){}
+  try{vrec.remove()}catch(x){}
+  try{voskStream.getTracks().forEach(function(t){t.stop()})}catch(x){}
+  try{voskCtx.close()}catch(x){}
+  setOff();
+  $('heard').textContent='Offline voice stopped.';
+}
+$('off').onclick=function(){if(voskOn)stopOffline();else startOffline()};
+if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(function(){})}
 
 // best-of buttons
 var bo=$('best');
