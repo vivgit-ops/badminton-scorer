@@ -193,15 +193,23 @@ function splitDigits(d){
   if(d.length===4)return [+d.slice(0,2),+d.slice(2)];
   return null;
 }
+function swapNow(){
+  if(mode==='pts'){if(over)return;snap();var t1=P.a;P.a=P.b;P.b=t1}
+  else{var t2=S.a;S.a=S.b;S.b=t2}
+  $('heard').textContent='Heard: play -> score swapped';
+  render();
+}
 function hear(t){
   if(/\bundo\b/i.test(t)){undo();$('heard').textContent='Heard: undo';return}
-  var r=nums(t),x,y;
+  var r=nums(t),x,y,sw=/\bplay\b/i.test(t);
   var runs=t.match(/\d+/g);
   if(!r.all&&runs&&runs.length===1&&r.n.length===1){var sp=splitDigits(runs[0]);if(sp)r.n=sp}
   if(r.all&&r.n.length>=1){x=y=r.n[0]}
   else if(r.n.length>=2){x=r.n[0];y=r.n[1]}
+  else if(sw){swapNow();return}
   else{$('heard').textContent='Heard: "'+t+'" - please say two numbers';return}
-  $('heard').textContent='Heard: "'+t+'" -> '+x+' - '+y;
+  if(sw){var tp=x;x=y;y=tp}
+  $('heard').textContent='Heard: "'+t+'" -> '+x+' - '+y+(sw?' (swapped)':'');
   applyScore(x,y);
 }
 function setMic(){
@@ -246,7 +254,7 @@ $('mic').onclick=function(){
 var winOn=false,winEvery=30,winTimer=null,winTick=null,winLeft=0,autoT=null;
 function submitTxt(){var v=$('vtxt').value.trim();if(!v)return;hear(v);$('vtxt').value='';$('vtxt').focus();if(winLeft>0){clearInterval(winTick);winLeft=0}}
 function ready(t){
-  if(/\bundo\b/i.test(t))return true;
+  if(/\bundo\b|\bplay\b/i.test(t))return true;
   var r=nums(t);
   if(r.all&&r.n.length>=1)return true;
   if(r.n.length>=2)return true;
@@ -275,8 +283,24 @@ $('vtxt').onkeydown=function(e){if(e.key==='Enter')submitTxt()};
 
 /* ---------- Local offline voice (only when served from localhost) ---------- */
 if(location.hostname==='localhost'||location.hostname==='127.0.0.1'){
+  $('mic').classList.add('hide');
   var es=new EventSource('/events');
   es.onopen=function(){$('heard').textContent='Local offline voice connected. Say the score.'};
+  var runCmd=function(c){
+    var m='Heard "'+(c.said||'')+'" -> ';
+    var pl=+c.player===1?'a':'b';
+    if(c.action==='point'&&mode==='pts'){point(pl);m+='point to '+nm(pl)}
+    else if(c.action==='undo'){undo();m+='undo'}
+    else if(c.action==='new_match'){resetPts();S={a:0,b:0};render();m+='new match'}
+    else if(c.action==='best_of'){
+      var bt=Array.prototype.filter.call(bo.children,function(b){return +b.textContent===+c.n})[0];
+      if(bt){bt.click();m+='best of '+c.n}else m+='(best of '+c.n+' not supported)';
+    }
+    else if(c.action==='score'&&typeof c.a==='number'&&typeof c.b==='number'){applyScore(c.a,c.b);m+='score '+c.a+' - '+c.b}
+    else m+='(unclear, nothing changed)';
+    $('heard').textContent=m;
+  };
+  es.addEventListener('cmd',function(e){try{runCmd(JSON.parse(e.data))}catch(x){$('heard').textContent='Could not read command'}});
   es.onmessage=function(e){hear(e.data)};
   es.onerror=function(){$('heard').textContent='Local voice server not running.'};
 }
